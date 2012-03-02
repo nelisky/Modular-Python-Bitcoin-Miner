@@ -39,6 +39,11 @@ class Job(object):
     self.check = check
     self.starttime = None
 
+  def gethash (self, nonce):
+    data = self.data[:76] + nonce + self.data[80:]
+    hash = hashlib.sha256(hashlib.sha256(struct.pack("<20I", *struct.unpack(">20I", data[:80]))).digest()).digest()
+    return hash
+  
   def sendresult(self, nonce, worker):
     if self.pool == None: return
     self.miner.log(worker.name + " found share: %s:%s:%s:%s\n" % (self.pool.name, binascii.hexlify(self.state).decode("ascii"), binascii.hexlify(self.data[64:76]).decode("ascii"), binascii.hexlify(nonce).decode("ascii")), "g")
