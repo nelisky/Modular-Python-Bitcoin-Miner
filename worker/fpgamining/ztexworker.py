@@ -1,26 +1,28 @@
-# Modular Python Bitcoin Miner
-# Copyright (C) 2011-2012 Michael Sparmann (TheSeven)
 #
-#     This program is free software; you can redistribute it and/or
-#     modify it under the terms of the GNU General Public License
-#     as published by the Free Software Foundation; either version 2
-#     of the License, or (at your option) any later version.
+#   ztexworker - Integrating ztex 1.15x boards into MPBM
 #
-#     This program is distributed in the hope that it will be useful,
-#     but WITHOUT ANY WARRANTY; without even the implied warranty of
-#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#     GNU General Public License for more details.
+#   (c) 2012 nelisky.btc@gmail.com
 #
-#     You should have received a copy of the GNU General Public License
-#     along with this program; if not, write to the Free Software
-#     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+#   This work is based upon the example worker bundled with MPBM and
+#   the Java BTCMiner provided by ztex which is
+#   Copyright (C) 2011 ZTEX GmbH
+#   http://www.ztex.de
+#   
 #
-# Please consider donating to 1PLAPWDejJPJnY2ppYCgtw5ko8G5Q4hPzh if you
-# want to support further development of the Modular Python Bitcoin Miner.
+#   This program is free software; you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License version 3 as
+#   published by the Free Software Foundation.
+#
+#   This program is distributed in the hope that it will be useful, but
+#   WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+#   General Public License for more details.
+#
+#   You should have received a copy of the GNU General Public License
+#   along with this program; if not, see http://www.gnu.org/licenses/.
 
 
-################################
-# Ztex worker interface module #
+
 ################################
 
 # TODO: count bad hashes
@@ -31,14 +33,11 @@
 
 # Module configuration options:
 #   name: Display name for this work source (default: "SimpleRS232 on " port name)
-#   port: Name (Windows) or device node (*nix) of the RS232 interface to use (default: "/dev/ttyS0")
-#   baudrate: Baud rate that should be used (default: 115200)
 #   jobinterval: New work is sent to the device at least every that many seconds (default: 30)
 
 
 import sys
 import common
-#import serial
 import binascii
 import threading
 import time
