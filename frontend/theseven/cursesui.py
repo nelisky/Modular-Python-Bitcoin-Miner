@@ -38,12 +38,14 @@ import datetime
 
 class CursesUI(object):
   def __init__(self, miner, dict):
+    print "prepping"
     self.__dict__ = dict
     self.miner = miner
     self.updateinterval = getattr(self, "updateinterval", 1)
     self.ysplit = 10 + len(self.miner.pools) + self.countchildren(self.miner.workers)
     atexit.register(self.shutdown)
     self.mainwin = curses.initscr()
+    print "1"
     curses.start_color()
     curses.curs_set(0)
     curses.init_pair(1, curses.COLOR_RED, 0)
@@ -60,6 +62,7 @@ class CursesUI(object):
     self.logwin.scrollok(True)
     self.logwin.move(499, 0)
     self.loglf = True
+    print "prepped"
     thread = threading.Thread(None, self.mainloop, "Curses UI")
     thread.daemon = True
     thread.start()
