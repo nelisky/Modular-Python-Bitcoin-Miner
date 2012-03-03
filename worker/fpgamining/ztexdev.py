@@ -181,10 +181,10 @@ class Ztex (object):
         if  not (i<len(self.interfaceCapabilities) and j<8 and 
                  (self.interfaceCapabilities[i] & (1<<j)) != 0):
             k = i*8+j
-            raise CapabilityException( k < len(capabilityStrings) and capabilityStrings[k] or ("Capabilty " + i + "," + j) ); 
+            raise CapabilityException( k < len(capabilityStrings) and capabilityStrings[k] or ("Capabilty " + i + "," + j) ) 
 
     def resetFpga (self):
-	self.checkCapability("CAPABILITY_FPGA");
+	self.checkCapability("CAPABILITY_FPGA")
         self._vendorCommand(0x31)
 
     def detectBitstreamBitOrder (self, buf):
@@ -240,7 +240,7 @@ class Ztex (object):
         @param force If set to true existing configurations will be overwritten.
         @param bs 0: disable bit swapping, 1: enable bit swapping, all other values: automatic detection of bit order.
         """
-	self.checkCapability("CAPABILITY_FPGA");
+	self.checkCapability("CAPABILITY_FPGA")
 	
         if (not force and self.getFpgaConfiguration()):
             raise AlreadyConfiguredException() 

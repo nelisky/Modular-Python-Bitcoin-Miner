@@ -43,7 +43,7 @@ import threading
 import time
 import struct
 
-from ztexdev import scanDevices
+from worker.fpgamining.ztexdev import scanDevices
 
 def dataToInt (data):
   return struct.unpack('<I', data)[0]
@@ -282,7 +282,7 @@ class ZtexWorker(object):
 
           # Fetch a job. Blocks until one is available. Because of this we need to release the
           # wake lock temporarily in order to avoid possible deadlocks.
-          self.canceled = False;
+          self.canceled = False
           self.wakeup.release()
           job = self.miner.getjob(self)
           # Doesn't need acquisition of the statlock because we're the only one who modifies this.
@@ -294,7 +294,7 @@ class ZtexWorker(object):
           # If it is, just discard it and get a new one.
           if self.canceled == True:
             if job.longpollepoch != job.pool.blockchain.longpollepoch: continue
-          self.canceled = False;
+          self.canceled = False
 
           # If an exception occurred in the listener thread, rethrow it
           if self.error != None: raise self.error
