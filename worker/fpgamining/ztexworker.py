@@ -129,9 +129,13 @@ class ZtexWorker(object):
     # Initialize child array (we won't ever have any)
     self.children = []
 
+    self.dead = False
+
     # Validate arguments, filling them with default values if not present
     self.serial = getattr(self, "serial", None)
-    self.name = getattr(self, "name", "Ztex s:" + str(self.serial))
+    self.device = getattr(self, "device", None)
+    self.deviceid = getattr(self, "deviceid", "")
+    self.name = getattr(self, "name", "Ztex miner")
     self.jobinterval = getattr(self, "jobinterval", 30)
     self.jobspersecond = 1. / self.jobinterval  # Used by work buffering algorithm
 
@@ -222,15 +226,24 @@ class ZtexWorker(object):
         self.nextjob = None
 
         # Get handle for the serial port
-        self.devices = scanDevices(serial=self.serial)
-        self.miner.log(self.name + ": Found %d device(s)\n" % len(self.devices),"y")
+        if self.device is None:
+          devices = scanDevices(serial=self.serial)
+          self.miner.log(self.name + ': Found %d device(s) with serial %s\n' % (len(devices), self.serial),"y")
+          if not len(devices):
+            time.sleep(1)
+            continue
+          self.device = devices[0]
 
         now = time.time()
         def cb (what):
           self.miner.log("-> %s\n" % str(what))
-        self.devices[0] = ZtexMinerHelper(self.devices[0], cb=cb)
+        self.device = ZtexMinerHelper(self.device, cb=cb)
         self.miner.log("Configuring %s-%d took %d ms\n" % (self.name, 1, int((time.time()-now)*1000)), "y")
 
+        self.serial = self.device.dev.serial
+        self.deviceid = self.device.dev.dev.iSerialNumber
+        self.name += '-%s-%d' % (self.serial, self.deviceid)
+        
         # We keep control of the wakeup lock at all times unless we're sleeping
         self.wakeup.acquire()
         # Set validation success flag to false
@@ -276,7 +289,7 @@ class ZtexWorker(object):
         # Tell the MPBM core that our hash rate has changed, so that it can adjust its work buffer.
         self.jobspersecond = 1. / self.jobinterval
         self.miner.updatehashrate(self)
-        self.devices[0].lockFreq = False
+        self.device.lockFreq = False
         # Main loop, continues until something goes wrong.
         while True:
 
@@ -336,10 +349,6 @@ class ZtexWorker(object):
         except: pass
         # Set MH/s to zero again, the listener thread might have overwritten that.
         self.mhps = 0
-        # Make sure that the RS232 interface handle is closed,
-        # otherwise we can't reopen it after restarting.
-        #try: self.handle.close()
-        #except: pass
         # Wait for a second to avoid 100% CPU load if something fails reproducibly
         time.sleep(1)
         # Restart (handled by "while True:" loop above)
@@ -364,7 +373,7 @@ class ZtexWorker(object):
             self.job = self.nextjob
             self.nextjob = None
             sendBuf = self.job.data[64:76] + self.job.state
-            self.devices[0].sendData(sendBuf)
+            self.device.sendData(sendBuf)
             self.job.starttime = time.time()
             self.wakeup.notify()
             continue
@@ -372,21 +381,18 @@ class ZtexWorker(object):
         # Try to read a response from the device
         data = ''
 
-        self.devices[0].getNoncesInt()
+        self.device.getNoncesInt()
 
-        for n in self.devices[0].goldenNonce:
+        for n in self.device.goldenNonce:
           if n > 0 and n not in nonces:
             data = intToData(n)
             nonces.append(n)
-            nonces = nonces[-(len(self.devices)+1) * len(self.devices[0].goldenNonce):]
+            nonces = nonces[-(len(self.device.goldenNonce)*1):]
             break
         
-        #data = self.handle.read(1)
-        # If no response was available, retry
-
         if len(data) == 0:
-          if self.devices[0].overflowCount > ovfcnt:
-            ovfcnt = self.devices[0].overflowCount
+          if self.device.overflowCount > ovfcnt:
+            ovfcnt = self.device.overflowCount
             # The device managed to process the whole 2**32 keyspace before we sent it new work.
             self.miner.log(self.name + " exhausted keyspace!\n", "y")
             # If it was a validation job, this probably means that there is a hardware bug
@@ -401,10 +407,10 @@ class ZtexWorker(object):
             # Wake up the main thread to fetch new work ASAP.
             with self.wakeup: self.wakeup.notify()
             continue
-          if self.nextjob == None and self.devices[0].nonce[0] > 0:
-            t = self.devices[0].checkNonce(self.job, self.devices[0].nonce[0], self.devices[0].hash7[0])
+          if self.nextjob == None and self.device.nonce[0] > 0:
+            t = self.device.checkNonce(self.job, self.device.nonce[0], self.device.hash7[0])
             if not t:
-              self.miner.log('checkNonce: %s, nonce: %d\n' % (t, self.devices[0].nonce[0]))
+              self.miner.log('checkNonce: %s, nonce: %d\n' % (t, self.device.nonce[0]))
             time.sleep(0.025)
         else:
           # We found a share!
@@ -413,7 +419,7 @@ class ZtexWorker(object):
           now = time.time()
           self.job.sendresult(nonce, self)
           delta = (now - self.job.starttime)
-          self.mhps = self.devices[0].nonce[0] / 1000000. / delta
+          self.mhps = self.device.nonce[0] / 1000000. / delta
           self.miner.updatehashrate(self)
           if self.job.check != None:
             # This is a validation job. Validate that the nonce is correct, and complain if not.
@@ -425,85 +431,6 @@ class ZtexWorker(object):
                 self.checksuccess = True
                 self.wakeup.notify()
           continue
-
-
-
-
-#        # Decode the response
-#        result = struct.unpack("B", data)[0]
-#
-#        if result == 1:
-#          # Got a job acknowledgement message.
-#          # If we didn't expect one (no job waiting to be accepted in nextjob), throw an exception.
-#          if self.nextjob == None: raise Exception("Got spurious job ACK from mining device")
-#          # The job has been uploaded. Start counting time for the new job, and if there was a
-#          # previous one, calculate for how long that one was running. Multiply that by the hash
-#          # rate to get the number of MHashes calculated for that job and update statistics.
-#          now = time.time()
-#          if self.job != None and self.job.starttime != None and self.job.pool != None:
-#            mhashes = (now - self.job.starttime) * self.mhps
-#            self.job.finish(mhashes, self)
-#            self.job.starttime = None
-#
-#          # Acknowledge the job by moving it from nextjob to job and wake up
-#          # the main thread that's waiting for the job acknowledgement.
-#          with self.wakeup:
-#            self.job = self.nextjob
-#            self.job.starttime = now
-#            self.nextjob = None
-#            self.wakeup.notify()
-#          continue
-#
-#        elif result == 2:
-#          # We found a share! Download the nonce.
-#          nonce = self.handle.read(4)[::-1]
-#          # If there is no job, this must be a leftover from somewhere.
-#          # In that case, just restart things to clean up the situation.
-#          if self.job == None: raise Exception("Mining device sent a share before even getting a job")
-#          # Stop time measurement
-#          now = time.time()
-#          # Pass the nonce that we found to the work source, if there is one.
-#          # Do this before calculating the hash rate as it is latency critical.
-#          self.job.sendresult(nonce, self)
-#          # Calculate actual on-device processing time (not including transfer times) of the job.
-#          delta = (now - self.job.starttime) - 40. / self.baudrate
-#          # Calculate the hash rate based on the processing time and number of neccessary MHashes.
-#          # This assumes that the device processes all nonces (starting at zero) sequentially.
-#          self.mhps = struct.unpack("<I", nonce)[0] / 1000000. / delta
-#          # Tell the MPBM core that our hash rate has changed, so that it can adjust its work buffer.
-#          self.miner.updatehashrate(self)
-#          # This needs self.mhps to be set, don't merge it with the inverse if above!
-#          # Otherwise a race condition between the main and listener threads may be the result.
-#          if self.job.check != None:
-#            # This is a validation job. Validate that the nonce is correct, and complain if not.
-#            if self.job.check != nonce:
-#              raise Exception("Mining device is not working correctly (returned %s instead of %s)" % (binascii.hexlify(nonce).decode("ascii"), binascii.hexlify(self.job.check).decode("ascii")))
-#            else:
-#              # The nonce was correct. Wake up the main thread.
-#              with self.wakeup:
-#                self.checksuccess = True
-#                self.wakeup.notify()
-#          continue
-#
-#        if result == 3:
-#          # The device managed to process the whole 2**32 keyspace before we sent it new work.
-#          self.miner.log(self.name + " exhausted keyspace!\n", "y")
-#          # If it was a validation job, this probably means that there is a hardware bug
-#          # or that the "found share" message was lost on the communication channel.
-#          if self.job.check != None: raise Exception("Validation job terminated without finding a share")
-#          # Stop measuring time because the device is doing duplicate work right now
-#          if self.job != None and self.job.starttime != None and self.job.pool != None:
-#            mhashes = (time.time() - self.job.starttime) * self.mhps
-#            with self.job.pool.statlock: self.job.pool.mhashes = self.job.pool.mhashes + mhashes
-#            self.mhashes = self.mhashes + mhashes
-#            self.job.starttime = None
-#          # Wake up the main thread to fetch new work ASAP.
-#          with self.wakeup: self.wakeup.notify()
-#          continue
-#
-#        # If we end up here, we received a message from the device that was invalid or unexpected.
-#        # All valid cases are terminated with a "continue" statement above.
-#        raise Exception("Got bad message from mining device: %d" % result)
 
     # If an exception is thrown in the listener thread...
     except Exception as e:
