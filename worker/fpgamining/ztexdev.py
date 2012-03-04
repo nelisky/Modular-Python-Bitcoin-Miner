@@ -99,6 +99,9 @@ class CapabilityException (Exception):
 class AlreadyConfiguredException (Exception):
     pass
 
+class BitstreamUploadException (Exception):
+    pass
+
 class Ztex (object):
     def __init__ (self, dev):
         self.dev = dev
@@ -136,6 +139,7 @@ class Ztex (object):
 
         if not (self.productId[0] == 10 and self.productId[2:4] == [1,1]):
             raise InvalidFirmwareException("Wrong or no firmware")
+        self.interfaceClaimed = [False] * 256
 
     def getDescriptor (self, force=False):
         if self.desc is None or force:
@@ -215,9 +219,12 @@ class Ztex (object):
         return self.getFpgaState()['fpgaConfigured']
 
     def configureFpga (self):
-        return self.configureFpgaLS(os.path.join(HERE, 'bitstreams',self.desc.bitFileName+'.bit'), True, 2)
+        try:
+            return self.configureFpgaHS(os.path.join(HERE, 'bitstreams',self.desc.bitFileName+'.bit'), True, 2)
+        except:
+            return self.configureFpgaLS(os.path.join(HERE, 'bitstreams',self.desc.bitFileName+'.bit'), True, 2)
 
-    def configureFpgaHS (firmware, force, bs):
+    def configureFpgaHS (self, firmware, force, bs):
         """
         Upload a Bitstream to the FPGA using high speed mode.
         
@@ -228,9 +235,49 @@ class Ztex (object):
 	self.checkCapability("CAPABILITY_HS_FPGA")
         settings = self._reqGetHSFpgaSettings()
 
-#        if (!force && self.getFpgaConfiguration()):
-#            raise AlreadyConfiguredException() 
-        #TODO: implement high speed config
+        if (not force and self.getFpgaConfiguration()):
+            raise AlreadyConfiguredException()
+        
+        ep = settings[0] & 255
+        iface = settings[1] & 255
+        releaseIF = not self.interfaceClaimed[iface]
+        
+        transactionBytes = 65536
+        buf = open(firmware, 'rb').read()
+        if len(buf) < 64:
+            raise BitstreamReadException("Invalid file size: %d" % len(buf))
+        
+        if bs < 0 or  bs > 1:
+	    bs = self.detectBitstreamBitOrder (buf)
+	if bs == 1:
+	    buf = self.swapBits(buf)
+
+        if releaseIF:
+            usb.util.claim_interface(self.dev, iface)
+            self.interfaceClaimed[iface] = True
+
+        for tries in range(3, 0, -1):
+            self._cmdInitHSFPGAConfiguration()
+            p = 0
+            cs = 0
+            while p < len(buf):
+                sent = self._bulkWrite(ep, buf[p:p+transactionBytes], iface, 10000)
+                p += sent
+            self._cmdFinishHSFPGAConfiguration()
+            state = self.getFpgaState()
+            try:
+                if not state['fpgaConfigured']:
+                    raise BitstreamUploadException("FPGA configuration failed: DONE pin does not go high")
+            except BitstreamUploadException, x:
+                if tries > 1:
+                    logger.error(str(x) + ': Retrying it...')
+                else:
+                    raise
+            else:
+                break
+        if releaseIF:
+            usb.util.release_interface(self.dev, iface)
+            self.interfaceClaimed[iface] = False
 
     def configureFpgaLS (self, firmware, force, bs):
         """
@@ -269,7 +316,7 @@ class Ztex (object):
                     raise BitstreamUploadException("FPGA configuration failed: DONE pin does not go high (size=%(fpgaBytes)s); checksum=%(fpgaChecksum)s should be %(cs)s; INIT_B_HIST=%(fpgaInitB)s)" % state)
             except BitstreamUploadException, x:
                 if tries > 1:
-                    logger.error(x.getMessage() + ': Retrying it...')
+                    logger.error(str(x) + ': Retrying it...')
                 else:
                     raise
             else:
@@ -281,6 +328,12 @@ class Ztex (object):
   
     def _cmdSendFpgaData (self, data):
         return self._vendorCommand(0x32, data=data)
+  
+    def _cmdInitHSFPGAConfiguration (self):
+        return self._vendorCommand(0x34)
+  
+    def _cmdFinishHSFPGAConfiguration (self):
+        return self._vendorCommand(0x35)
   
     def _cmdSendHashData (self, data):
         return self._vendorCommand(0x80, data=data)
@@ -299,6 +352,13 @@ class Ztex (object):
   
     def _reqGetHSFpgaSettings (self):
         return self._vendorRequest(0x33,maxlen=2)
+
+    def _bulkWrite (self, ep, data, iface=None, timeout=None):
+        if type(data) == type('') or (type(data) == type([]) and type(data[0]) == type('')):
+            data  = [ord(x) for x in data]
+        if data is None:
+            data = []
+        return self.dev.write(ep, data, iface, timeout=timeout)
   
     def _vendorCommand (self, cmd, value=0, index=0, data=None):
         if type(data) == type('') or (type(data) == type([]) and type(data[0]) == type('')):
@@ -351,7 +411,10 @@ class Descriptor (object):
 def scanDevices (serial=None):
   devs = usb.core.find(find_all=True, idVendor=0x221a, idProduct=0x0100)
   for d in devs:
-    d.set_configuration()
+    try:
+      d.set_configuration()
+    except usb.core.USBError:
+      continue
   rv = [Ztex(x) for x in devs]
   if serial is not None:
     rv = filter(lambda x: x.getSerial() == serial, rv)
