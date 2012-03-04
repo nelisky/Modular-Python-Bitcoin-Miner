@@ -130,12 +130,14 @@ class ZtexWorker(object):
     self.children = []
 
     self.dead = False
+    self.standalone = dev is None
 
     # Validate arguments, filling them with default values if not present
     self.serial = getattr(self, "serial", None)
-    self.device = getattr(self, "device", None)
+    self.device = dev
     self.deviceid = getattr(self, "deviceid", "")
-    self.name = getattr(self, "name", "Ztex miner")
+    self.basename = getattr(self, "name", "Ztex miner")
+    self.name = self.basename
     self.jobinterval = getattr(self, "jobinterval", 30)
     self.jobspersecond = 1. / self.jobinterval  # Used by work buffering algorithm
 
@@ -209,7 +211,7 @@ class ZtexWorker(object):
   def main(self):
   
     # Loop forever. If anything fails, restart threads.
-    while True:
+    while not self.dead:
       try:
 
         # Exception container: If an exception occurs in the listener thread, the listener thread
@@ -242,7 +244,7 @@ class ZtexWorker(object):
 
         self.serial = self.device.dev.serial
         self.deviceid = self.device.dev.dev.iSerialNumber
-        self.name += '-%s-%d' % (self.serial, self.deviceid)
+        self.name = self.basename + '-%s-%d' % (self.serial, self.deviceid)
         
         # We keep control of the wakeup lock at all times unless we're sleeping
         self.wakeup.acquire()
@@ -334,6 +336,8 @@ class ZtexWorker(object):
 
       # If something went wrong...
       except Exception as e:
+        import traceback
+        self.miner.log(traceback.format_exc()+ '\n')
         # ...complain about it!
         self.miner.log(self.name + ": %s\n" % e, "rB")
         # Make sure that the listener thread realizes that something went wrong
@@ -351,6 +355,10 @@ class ZtexWorker(object):
         self.mhps = 0
         # Wait for a second to avoid 100% CPU load if something fails reproducibly
         time.sleep(1)
+        if self.standalone:
+          self.device = None
+        else:
+          self.dead = True
         # Restart (handled by "while True:" loop above)
 
 
