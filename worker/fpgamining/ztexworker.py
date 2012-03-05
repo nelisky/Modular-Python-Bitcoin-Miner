@@ -69,7 +69,11 @@ class ZtexMinerHelper (object):
     self.dev.configureFpga()
     self.adjustFreq(0)
 
+    self.ingoreErrorTime = 0
+
   def checkNonce (self, job, n, h):
+    if time.time() < self.ignoreErrorTime:
+      return True
     if self.lockFreq:
       return None
     rv = False
@@ -96,6 +100,7 @@ class ZtexMinerHelper (object):
     self.checkcnt_good = 0
     self.checkcnt_bad = 0
     self.dev._cmdSetFreq(self.dev.getDescriptor().freqM + f)
+    self.ignoreErrorTime = time.time() + .25
     self._cb and self._cb(('adjustFreq', self.dev.getDescriptor().freqM1 * (self.dev.getDescriptor().freqM + f + 1)))
 
   def sendData (self, data):
@@ -106,11 +111,15 @@ class ZtexMinerHelper (object):
     buf = self.dev._reqReadHashData()
     overflow = False
     for i in range(self.numNonces):
-      self.goldenNonce[i] = dataToInt(buf[i*12:i*12+4]) - self.offsNonces
-      j = dataToInt(buf[i*12+4:i*12+8]) - self.offsNonces
-      overflow = overflow or (((j >> 4) & 0xffffffff) < ((self.nonce[i]>>4) & 0xffffffff))
-      self.nonce[i] = j
-      self.hash7[i] = dataToInt(buf[i*12+8: i*12+12])
+      try:
+        self.goldenNonce[i] = dataToInt(buf[i*12:i*12+4]) - self.offsNonces
+        j = dataToInt(buf[i*12+4:i*12+8]) - self.offsNonces
+        overflow = overflow or (((j >> 4) & 0xffffffff) < ((self.nonce[i]>>4) & 0xffffffff))
+        self.nonce[i] = j
+        self.hash7[i] = dataToInt(buf[i*12+8: i*12+12])
+      except struct.error:
+        # something wrong with the read data
+        pass
     if overflow:
       self.overflowCount += 1
 
