@@ -55,7 +55,7 @@ class ZtexHotplug(object):
     self.name = getattr(self, "name", "Ztex hotplug manager")
     self.scaninterval = getattr(self, "scaninterval", 10)
     self.jobinterval = getattr(self, "jobinterval", 30)
-    self.jobspersecond = 1. / self.jobinterval  # Used by work buffering algorithm
+    self.jobspersecond = 0
 
     # Initialize object properties (for statistics)
     self.mhps = 0          # Current MH/s
