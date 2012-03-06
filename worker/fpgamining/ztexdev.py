@@ -218,8 +218,10 @@ class Ztex (object):
     def getFpgaConfiguration (self):
         return self.getFpgaState()['fpgaConfigured']
 
-    def configureFpga (self):
+    def configureFpga (self, ep0force=False):
         try:
+            if ep0force:
+                return self.configureFpgaLS(os.path.join(HERE, 'bitstreams',self.desc.bitFileName+'.bit'), True, 2)
             return self.configureFpgaHS(os.path.join(HERE, 'bitstreams',self.desc.bitFileName+'.bit'), True, 2)
         except:
             return self.configureFpgaLS(os.path.join(HERE, 'bitstreams',self.desc.bitFileName+'.bit'), True, 2)

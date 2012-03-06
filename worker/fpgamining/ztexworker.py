@@ -53,7 +53,7 @@ def intToData (data):
 
 
 class ZtexMinerHelper (object):
-  def __init__ (self, dev, cb=None):
+  def __init__ (self, dev, ep0force=False, cb=None):
     self.dev = dev
     self.numNonces = self.dev.getDescriptor().numNonces
     self.offsNonces = self.dev.getDescriptor().offsNonces
@@ -66,7 +66,7 @@ class ZtexMinerHelper (object):
 
     self._checkcnt_goodtrigger = 1000
     
-    self.dev.configureFpga()
+    self.dev.configureFpga(ep0force=ep0force)
     self.adjustFreq(0)
 
     self.ingoreErrorTime = 0
@@ -149,6 +149,7 @@ class ZtexWorker(object):
     self.name = self.basename
     self.jobinterval = getattr(self, "jobinterval", 30)
     self.jobspersecond = 1. / self.jobinterval  # Used by work buffering algorithm
+    self.ep0force = getattr(self, "ep0force", False)
 
     # Initialize object properties (for statistics)
     self.mhps = 0          # Current MH/s
@@ -248,7 +249,7 @@ class ZtexWorker(object):
         now = time.time()
         def cb (what):
           self.miner.log("-> %s\n" % str(what))
-        self.device = ZtexMinerHelper(self.device, cb=cb)
+        self.device = ZtexMinerHelper(self.device, ep0force=self.ep0force, cb=cb)
         self.miner.log("Configuring %s-%d took %d ms\n" % (self.name, 1, int((time.time()-now)*1000)), "y")
 
         self.serial = self.device.dev.serial

@@ -55,6 +55,7 @@ class ZtexHotplug(object):
     self.name = getattr(self, "name", "Ztex hotplug manager")
     self.scaninterval = getattr(self, "scaninterval", 10)
     self.jobinterval = getattr(self, "jobinterval", 30)
+    self.ep0force = getattr(self, "ep0force", False)
     self.jobspersecond = 0
 
     # Initialize object properties (for statistics)
@@ -136,6 +137,7 @@ class ZtexHotplug(object):
               "serial": self.serial, \
               "name": "Ztex miner", \
               "jobinterval": self.jobinterval, \
+              "ep0force": self.ep0force, \
             }
             self.children.append(ZtexWorker(self.miner, config, dev))
       except Exception as e:
