@@ -25,12 +25,6 @@
 
 ################################
 
-# TODO: count bad hashes
-# TODO: freq setting algo based on error rate
-# TODO: high speed configuration of fpga
-
-
-
 # Module configuration options:
 #   name: Display name for this work source (default: "SimpleRS232 on " port name)
 #   jobinterval: New work is sent to the device at least every that many seconds (default: 30)
@@ -253,7 +247,8 @@ class ZtexWorker(object):
         self.miner.log("Configuring %s-%d took %d ms\n" % (self.name, 1, int((time.time()-now)*1000)), "y")
 
         self.serial = self.device.dev.serial
-        self.deviceid = self.device.dev.dev.iSerialNumber
+        self.busid = self.device.dev.dev.bus
+        self.deviceid = self.device.dev.dev.address
         self.name = self.basename + '-%s-%d' % (self.serial, self.deviceid)
         
         # We keep control of the wakeup lock at all times unless we're sleeping
